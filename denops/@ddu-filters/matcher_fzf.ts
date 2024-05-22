@@ -6,7 +6,6 @@ import {
 } from "https://deno.land/x/ddu_vim@v4.1.0/types.ts";
 import { Denops } from "https://deno.land/x/ddu_vim@v4.1.0/deps.ts";
 import { asyncExtendedMatch, AsyncFzf, FzfResultItem } from "https://esm.sh/fzf@0.5.2";
-import { ArrayElement } from "https://deno.land/x/fest@v3.5.1/source/internal.d.ts";
 
 const HIGHLIGHT_NAME = "fzf_matched";
 
@@ -45,7 +44,7 @@ export class Filter extends BaseFilter<Params> {
       });
     }
 
-    let items: FzfResultItem<DduItem>;
+    let items: FzfResultItem<DduItem>[];
     try {
       items = await fzf.find(input);
     } catch {
