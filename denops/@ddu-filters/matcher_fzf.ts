@@ -1,10 +1,11 @@
 import {
   BaseFilter,
   DduItem,
+  ItemHighlight,
   SourceOptions,
-} from "https://deno.land/x/ddu_vim@v2.8.6/types.ts";
-import { Denops } from "https://deno.land/x/ddu_vim@v2.8.6/deps.ts";
-import { extendedMatch, Fzf } from "https://esm.sh/fzf@0.5.1";
+} from "https://deno.land/x/ddu_vim@v4.1.0/types.ts";
+import { Denops } from "https://deno.land/x/ddu_vim@v4.1.0/deps.ts";
+import { asyncExtendedMatch, AsyncFzf, FzfResultItem } from "https://esm.sh/fzf@0.5.2";
 
 const HIGHLIGHT_NAME = "fzf_matched";
 
@@ -14,13 +15,12 @@ type Params = {
 
 const ENCODER = new TextEncoder();
 
-// from https://github.com/Shougo/ddu-filter-matcher_substring/blob/c6d56f3548b546803ef336b8f0aa379971db8c9a/denops/%40ddu-filters/matcher_substring.ts#L13-L15
 function charposToBytepos(input: string, pos: number): number {
   return ENCODER.encode(input.slice(0, pos)).length;
 }
 
 export class Filter extends BaseFilter<Params> {
-  filter(args: {
+  async filter(args: {
     denops: Denops;
     sourceOptions: SourceOptions;
     input: string;
@@ -29,23 +29,38 @@ export class Filter extends BaseFilter<Params> {
   }): Promise<DduItem[]> {
     const input = args.input;
 
-    const fzf = new Fzf(args.items, {
-      match: extendedMatch,
-      selector: (item) => item.matcherKey || item.word,
-      sort: false,
-    });
-
-    const items = fzf.find(input);
-    if (args.filterParams.highlightMatched === "") {
-      return Promise.resolve(items.map((v) => v.item));
+    let fzf: AsyncFzf<ReadonlyArray<DduItem>>;
+    if (input.length <= 3) {
+      fzf = new AsyncFzf(args.items, {
+        fuzzy: "v1",
+        match: asyncExtendedMatch,
+        selector: (item: DduItem) =>  item.matcherKey || item.word,
+      });
+    } else {
+      fzf = new AsyncFzf(args.items, {
+        fuzzy: "v2",
+        match: asyncExtendedMatch,
+        selector: (item: DduItem) =>  item.matcherKey || item.word,
+      });
     }
 
-    return Promise.resolve(items.map((v) => {
+    let items: FzfResultItem<DduItem>;
+    try {
+      items = await fzf.find(input);
+    } catch {
+      return [];
+    }
+
+    if (args.filterParams.highlightMatched === "") {
+      return items.map((v: FzfResultItem<DduItem>) => v.item);
+    }
+
+    return items.map((v: FzfResultItem<DduItem>) => {
       if (v.start >= 0) {
         const target = v.item.matcherKey || v.item.word;
         const positions = [...v.positions].sort((a, b) => a - b);
         let { highlights = [] } = v.item;
-        highlights = highlights.filter((hl) => hl.name !== HIGHLIGHT_NAME);
+        highlights = highlights.filter((hl: ItemHighlight) => hl.name !== HIGHLIGHT_NAME);
         let offset = 0;
         if (v.item.display !== undefined) {
           const offset_char = v.item.display.indexOf(target);
@@ -87,7 +102,7 @@ export class Filter extends BaseFilter<Params> {
       } else {
         return v.item;
       }
-    }));
+    });
   }
 
   params(): Params {
